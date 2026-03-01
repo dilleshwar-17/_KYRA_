@@ -1,0 +1,28 @@
+{
+    "name": "kyra-frontend",
+    "version": "1.0.0",
+    "private": true,
+    "main": "electron/main.js",
+    "scripts": {
+        "dev": "vite",
+        "build": "tsc && vite build",
+        "electron": "electron electron/main.js",
+        "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron electron/main.js\"",
+        "preview": "vite preview"
+    },
+    "dependencies": {
+        "react": "^18.3.1",
+        "react-dom": "^18.3.1"
+    },
+    "devDependencies": {
+        "@types/react": "^18.3.5",
+        "@types/react-dom": "^18.3.0",
+        "@vitejs/plugin-react": "^4.3.1",
+        "concurrently": "^8.2.2",
+        "electron": "^32.0.0",
+        "electron-builder": "^24.13.3",
+        "typescript": "^5.5.3",
+        "vite": "^5.4.1",
+        "wait-on": "^7.2.0"
+    }
+}
