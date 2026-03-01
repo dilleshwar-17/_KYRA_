@@ -1,5 +1,5 @@
 """
-J.A.R.V.I.S - Voice Module
+KYRA - Voice Module
 Speech-to-Text (microphone input) and Text-to-Speech (pyttsx3 output).
 Gracefully handles missing PyAudio — falls back to text-only mode.
 """
