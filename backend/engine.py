@@ -23,7 +23,6 @@ Your personality:
 CANDIDATE_MODELS = [
     "Meta-Llama-3.3-70B-Instruct",
     "Meta-Llama-3.1-8B-Instruct",
-    "Meta-Llama-3.1-405B-Instruct",
     "Qwen2.5-72B-Instruct",
     "DeepSeek-R1-Distill-Llama-70B",
 ]
@@ -71,16 +70,16 @@ class KYRAEngine:
                 return reply
 
             except Exception as e:
-                err = str(e)
+                err = str(e).lower()
                 print(f"⚠️  {self._model} error: {err[:100]}")
 
-                if "429" in err or "rate" in err.lower():
+                if "429" in err or "rate limit" in err:
                     # Rate limit — wait briefly then try next model
                     time.sleep(2)
                     self._model_idx += 1
                     print(f"↪ Switching to {self._model}")
                     continue
-                elif "404" in err or "not found" in err.lower():
+                elif "404" in err or "400" in err or "not found" in err or "not available" in err or "deprecated" in err:
                     self._model_idx += 1
                     print(f"↪ Model unavailable, switching to {self._model}")
                     continue
