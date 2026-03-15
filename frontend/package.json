@@ -1,13 +1,14 @@
 {
-    "name": "kyra-frontend",
+    "name": "kyra",
+    "productName": "KYRA AI Assistant",
     "version": "1.0.0",
     "private": true,
     "main": "electron/main.js",
     "scripts": {
         "dev": "vite",
         "build": "tsc && vite build",
-        "electron": "electron electron/main.js",
-        "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron electron/main.js\"",
+        "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && cross-env ELECTRON_RUN_AS_NODE= electron electron/main.js\"",
+        "electron:build": "npm run build && electron-builder",
         "preview": "vite preview"
     },
     "dependencies": {
@@ -19,10 +20,48 @@
         "@types/react-dom": "^18.3.0",
         "@vitejs/plugin-react": "^4.3.1",
         "concurrently": "^8.2.2",
+        "cross-env": "^10.1.0",
         "electron": "^32.0.0",
         "electron-builder": "^24.13.3",
+        "electron-icon-builder": "^2.0.1",
         "typescript": "^5.5.3",
         "vite": "^5.4.1",
         "wait-on": "^7.2.0"
+    },
+    "build": {
+        "appId": "com.kyra.assistant",
+        "productName": "KYRA",
+        "directories": {
+            "output": "C:/Users/srira/Downloads/KYRA_App"
+        },
+        "win": {
+            "target": "nsis",
+            "icon": "public/icons/icon.ico"
+        },
+        "nsis": {
+            "oneClick": false,
+            "perMachine": false,
+            "allowToChangeInstallationDirectory": true,
+            "installerIcon": "public/icons/icon.ico",
+            "uninstallerIcon": "public/icons/icon.ico",
+            "installerHeaderIcon": "public/icons/icon.ico",
+            "createDesktopShortcut": true,
+            "createStartMenuShortcut": true,
+            "shortcutName": "KYRA AI"
+        },
+        "files": [
+            "dist/**/*",
+            "electron/**/*",
+            "public/**/*"
+        ],
+        "extraResources": [
+            {
+                "from": "../backend/dist/kyra_backend",
+                "to": "backend",
+                "filter": [
+                    "**/*"
+                ]
+            }
+        ]
     }
 }

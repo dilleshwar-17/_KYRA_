@@ -1,0 +1,77 @@
+Available Audio Devices:
+--------------------------------------------------
+ID: 0 | Name: Microsoft Sound Mapper - Input | Input Channels: 2 | Output Channels: 0 | Default SR: 44100
+ID: 1 | Name: Microphone Array (Senary Audio) | Input Channels: 2 | Output Channels: 0 | Default SR: 44100
+ID: 2 | Name: Microphone (BYOM-Media) | Input Channels: 2 | Output Channels: 0 | Default SR: 44100
+ID: 3 | Name: Microsoft Sound Mapper - Output | Input Channels: 0 | Output Channels: 2 | Default SR: 44100
+ID: 4 | Name: Speakers (BYOM-Media) | Input Channels: 0 | Output Channels: 2 | Default SR: 44100
+ID: 5 | Name: Speakers (Senary Audio) | Input Channels: 0 | Output Channels: 8 | Default SR: 44100
+ID: 6 | Name: Primary Sound Capture Driver | Input Channels: 2 | Output Channels: 0 | Default SR: 44100
+ID: 7 | Name: Microphone Array (Senary Audio) | Input Channels: 2 | Output Channels: 0 | Default SR: 44100
+ID: 8 | Name: Microphone (BYOM-Media) | Input Channels: 2 | Output Channels: 0 | Default SR: 44100
+ID: 9 | Name: Primary Sound Driver | Input Channels: 0 | Output Channels: 2 | Default SR: 44100
+ID: 10 | Name: Speakers (BYOM-Media) | Input Channels: 0 | Output Channels: 2 | Default SR: 44100
+ID: 11 | Name: Speakers (Senary Audio) | Input Channels: 0 | Output Channels: 8 | Default SR: 44100
+ID: 12 | Name: Speakers (Senary Audio) | Input Channels: 0 | Output Channels: 2 | Default SR: 48000
+ID: 13 | Name: Speakers (BYOM-Media) | Input Channels: 0 | Output Channels: 2 | Default SR: 48000
+ID: 14 | Name: Microphone Array (Senary Audio) | Input Channels: 2 | Output Channels: 0 | Default SR: 48000
+ID: 15 | Name: Microphone (BYOM-Media) | Input Channels: 2 | Output Channels: 0 | Default SR: 44100
+ID: 16 | Name: Output 1 (Senary Audio output) | Input Channels: 0 | Output Channels: 2 | Default SR: 48000
+ID: 17 | Name: Output 2 (Senary Audio output) | Input Channels: 0 | Output Channels: 8 | Default SR: 44100
+ID: 18 | Name: Input (Senary Audio output) | Input Channels: 2 | Output Channels: 0 | Default SR: 48000
+ID: 19 | Name: Microphone Array (Senary Audio capture) | Input Channels: 2 | Output Channels: 0 | Default SR: 48000
+ID: 20 | Name: Output (@System32\drivers\bthhfenum.sys,#4;%1 Hands-Free HF Audio%0
+;(realme 8 5G)) | Input Channels: 0 | Output Channels: 1 | Default SR: 8000
+ID: 21 | Name: Input (@System32\drivers\bthhfenum.sys,#4;%1 Hands-Free HF Audio%0
+;(realme 8 5G)) | Input Channels: 1 | Output Channels: 0 | Default SR: 8000
+ID: 22 | Name: Headphones () | Input Channels: 0 | Output Channels: 2 | Default SR: 44100
+ID: 23 | Name: Headphones () | Input Channels: 0 | Output Channels: 2 | Default SR: 44100
+ID: 24 | Name: Headset (@System32\drivers\bthhfenum.sys,#2;%1 Hands-Free%0
+;(AirPods Pro )) | Input Channels: 0 | Output Channels: 1 | Default SR: 8000
+ID: 25 | Name: Headset (@System32\drivers\bthhfenum.sys,#2;%1 Hands-Free%0
+;(AirPods Pro )) | Input Channels: 1 | Output Channels: 0 | Default SR: 8000
+ID: 26 | Name: Input () | Input Channels: 2 | Output Channels: 0 | Default SR: 44100
+ID: 27 | Name: Headphones () | Input Channels: 0 | Output Channels: 2 | Default SR: 44100
+ID: 28 | Name: Input () | Input Channels: 2 | Output Channels: 0 | Default SR: 44100
+ID: 29 | Name: Headset (@System32\drivers\bthhfenum.sys,#2;%1 Hands-Free%0
+;(Airdopes Primo)) | Input Channels: 0 | Output Channels: 1 | Default SR: 8000
+ID: 30 | Name: Headset (@System32\drivers\bthhfenum.sys,#2;%1 Hands-Free%0
+;(Airdopes Primo)) | Input Channels: 1 | Output Channels: 0 | Default SR: 8000
+ID: 31 | Name: Input () | Input Channels: 2 | Output Channels: 0 | Default SR: 44100
+ID: 32 | Name: Output (@System32\drivers\bthhfenum.sys,#4;%1 Hands-Free HF Audio%0
+;(OnePlus Nord2 5g)) | Input Channels: 0 | Output Channels: 1 | Default SR: 8000
+ID: 33 | Name: Input (@System32\drivers\bthhfenum.sys,#4;%1 Hands-Free HF Audio%0
+;(OnePlus Nord2 5g)) | Input Channels: 1 | Output Channels: 0 | Default SR: 8000
+ID: 34 | Name: Output (@System32\drivers\bthhfenum.sys,#4;%1 Hands-Free HF Audio%0
+;(realme GT 2 Pro)) | Input Channels: 0 | Output Channels: 1 | Default SR: 8000
+ID: 35 | Name: Input (@System32\drivers\bthhfenum.sys,#4;%1 Hands-Free HF Audio%0
+;(realme GT 2 Pro)) | Input Channels: 1 | Output Channels: 0 | Default SR: 8000
+ID: 36 | Name: Microphone (BYOM-Media) | Input Channels: 2 | Output Channels: 0 | Default SR: 44100
+ID: 37 | Name: Speakers (BYOM-Media) | Input Channels: 0 | Output Channels: 2 | Default SR: 44100
+ID: 38 | Name: Headset (@System32\drivers\bthhfenum.sys,#2;%1 Hands-Free%0
+;(Bymuse Vibe)) | Input Channels: 0 | Output Channels: 1 | Default SR: 8000
+ID: 39 | Name: Headset (@System32\drivers\bthhfenum.sys,#2;%1 Hands-Free%0
+;(Bymuse Vibe)) | Input Channels: 1 | Output Channels: 0 | Default SR: 8000
+ID: 40 | Name: Headset Earphone (@System32\drivers\bthhfenum.sys,#2;%1 Hands-Free%0
+;(LAPTOP-FFVH4CC3)) | Input Channels: 0 | Output Channels: 1 | Default SR: 8000
+ID: 41 | Name: Headset Microphone (@System32\drivers\bthhfenum.sys,#2;%1 Hands-Free%0
+;(LAPTOP-FFVH4CC3)) | Input Channels: 1 | Output Channels: 0 | Default SR: 8000
+ID: 42 | Name: Headset (@System32\drivers\bthhfenum.sys,#2;%1 Hands-Free%0
+;(Airdopes Max)) | Input Channels: 0 | Output Channels: 1 | Default SR: 8000
+ID: 43 | Name: Headset (@System32\drivers\bthhfenum.sys,#2;%1 Hands-Free%0
+;(Airdopes Max)) | Input Channels: 1 | Output Channels: 0 | Default SR: 8000
+ID: 44 | Name: Headset (@System32\drivers\bthhfenum.sys,#2;%1 Hands-Free%0
+;(Airdopes 138)) | Input Channels: 0 | Output Channels: 1 | Default SR: 8000
+ID: 45 | Name: Headset (@System32\drivers\bthhfenum.sys,#2;%1 Hands-Free%0
+;(Airdopes 138)) | Input Channels: 1 | Output Channels: 0 | Default SR: 8000
+ID: 46 | Name: Headphones () | Input Channels: 0 | Output Channels: 2 | Default SR: 44100
+ID: 47 | Name: Headphones () | Input Channels: 0 | Output Channels: 2 | Default SR: 44100
+ID: 48 | Name: Speakers () | Input Channels: 0 | Output Channels: 2 | Default SR: 44100
+ID: 49 | Name: Headphones () | Input Channels: 0 | Output Channels: 2 | Default SR: 44100
+ID: 50 | Name: Headset (@System32\drivers\bthhfenum.sys,#2;%1 Hands-Free%0
+;(Airdopes 141 ANC)) | Input Channels: 0 | Output Channels: 1 | Default SR: 8000
+ID: 51 | Name: Headset (@System32\drivers\bthhfenum.sys,#2;%1 Hands-Free%0
+;(Airdopes 141 ANC)) | Input Channels: 1 | Output Channels: 0 | Default SR: 8000
+--------------------------------------------------
+Default Input Device ID: 1
+Default Output Device ID: 4

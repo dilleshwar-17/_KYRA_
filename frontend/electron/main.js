@@ -8,15 +8,81 @@
  * Windows compatibility: no empty nativeImage tray (crashes on some builds).
  */
 
+// ─── Self-relaunch guard ───────────────────────────────────────────────────────────
+// When ELECTRON_RUN_AS_NODE=1 is set (e.g. by some IDE / Python env),
+// require('electron') returns a file path string instead of the module.
+// Detect this and re-spawn via the actual electron binary with the var cleared.
+if (process.env.ELECTRON_RUN_AS_NODE) {
+    const { spawnSync } = require('child_process');
+    const electronBin = require('electron'); // will be a path string here
+    delete process.env.ELECTRON_RUN_AS_NODE;
+    const result = spawnSync(
+        electronBin,
+        [__filename, ...process.argv.slice(2)],
+        {
+            stdio: 'inherit',
+            env: { ...process.env },   // ELECTRON_RUN_AS_NODE already deleted
+            detached: false,
+        }
+    );
+    process.exit(result.status ?? 0);
+}
+
 const { app, BrowserWindow, ipcMain, screen, Menu, Tray, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { spawn } = require('child_process');
+
+// ─── Global crash guards ──────────────────────────────────────────────────────
+// Prevents EPIPE / broken-pipe from showing the JS error dialog when launched
+// without an attached terminal (e.g. double-clicking run_kyra.bat).
+process.on('uncaughtException', (err) => {
+    if (err.code === 'EPIPE' || err.code === 'ECONNRESET') return; // swallow silently
+    console.error('[KYRA] Uncaught exception:', err);
+});
+process.on('unhandledRejection', (reason) => {
+    console.error('[KYRA] Unhandled rejection:', reason);
+});
 
 const isDev = process.env.NODE_ENV !== 'production';
 
 let avatarWin = null;
 let chatWin = null;
 let tray = null;
+let backendProc = null;
+
+// ─── Backend Spawn ────────────────────────────────────────────────────────────
+
+function startBackend() {
+    let cmd, args, cwd;
+
+    if (isDev) {
+        // Dev: use venv python
+        const root = path.join(__dirname, '..', '..', 'backend');
+        const venvPy = path.join(root, '..', '.venv', 'Scripts', 'python.exe');
+        const python = fs.existsSync(venvPy) ? venvPy : 'python';
+        cmd = python;
+        args = ['main.py'];
+        cwd = root;
+    } else {
+        // Production: bundled backend exe next to this file
+        const exePath = path.join(process.resourcesPath, 'backend', 'kyra_backend.exe');
+        cmd = exePath;
+        args = [];
+        cwd = path.dirname(exePath);
+    }
+
+    console.log(`Spawning backend: ${cmd} ${args.join(' ')}`);
+    backendProc = spawn(cmd, args, {
+        cwd,
+        env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+        // 'ignore' avoids EPIPE when no terminal is attached (e.g. launched via .bat)
+        stdio: 'ignore',
+        detached: false,
+    });
+
+    backendProc.on('exit', code => console.log(`Backend process exited with code: ${code}`));
+}
 
 // ─── Avatar Window ────────────────────────────────────────────────────────────
 
@@ -100,6 +166,24 @@ function createChatWindow() {
     chatWin.on('closed', () => { chatWin = null; });
 }
 
+// ─── Auto-start (Windows Registry via Electron) ────────────────────────────────
+
+function getAutoStart() {
+    return app.getLoginItemSettings().openAtLogin;
+}
+
+function setAutoStart(enable) {
+    const exePath = process.execPath;
+    app.setLoginItemSettings({
+        openAtLogin: enable,
+        // In dev, point to electron + main.js; in production, just the exe
+        path: exePath,
+        args: isDev ? [path.resolve(__dirname, '../electron/main.js')] : [],
+        name: 'KYRA AI',
+    });
+    console.log(`Auto-start ${enable ? 'enabled' : 'disabled'}`);
+}
+
 // ─── Tray ─────────────────────────────────────────────────────────────────────
 
 function createTray() {
@@ -120,19 +204,32 @@ function createTray() {
 
         tray = new Tray(icon);
         tray.setToolTip('KYRA AI Assistant');
-
-        const menu = Menu.buildFromTemplate([
-            { label: '💬 Open Chat', click: createChatWindow },
-            { label: '👁 Show Avatar', click: () => createAvatarWindow() },
-            { type: 'separator' },
-            { label: '✕ Quit KYRA', click: () => app.quit() },
-        ]);
-        tray.setContextMenu(menu);
+        buildTrayMenu();
         tray.on('double-click', createChatWindow);
         console.log('✅ Tray created');
     } catch (e) {
         console.warn('⚠️  Tray creation failed (non-fatal):', e.message);
     }
+}
+
+function buildTrayMenu() {
+    if (!tray) return;
+    const isAutoStart = getAutoStart();
+    const menu = Menu.buildFromTemplate([
+        { label: '💬 Open Chat',    click: createChatWindow },
+        { label: '👁 Show Avatar',  click: () => createAvatarWindow() },
+        { type: 'separator' },
+        {
+            label: `${isAutoStart ? '✅' : '⬜'} Start with Windows`,
+            click: () => {
+                setAutoStart(!isAutoStart);
+                buildTrayMenu(); // refresh menu to show new state
+            },
+        },
+        { type: 'separator' },
+        { label: '✕ Quit KYRA', click: () => app.quit() },
+    ]);
+    tray.setContextMenu(menu);
 }
 
 // ─── IPC Handlers ─────────────────────────────────────────────────────────────
@@ -175,14 +272,30 @@ function setupIPC() {
 // ─── App Lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
+    startBackend();
+
+    // Enable auto-start on first launch (only if not already set)
+    if (!isDev && !getAutoStart()) {
+        setAutoStart(true);
+        console.log('Auto-start registered on first launch.');
+    }
+
+    // Open UI immediately — windows use ready-to-show so they
+    // appear only once fully painted (no white flicker).
     setupIPC();
     createAvatarWindow();
     createTray();
 });
 
 app.on('window-all-closed', () => {
-    // Keep alive via tray — only quit on macOS convention or explicit quit
     if (process.platform !== 'darwin' && !tray) app.quit();
+});
+
+app.on('before-quit', () => {
+    if (backendProc) {
+        backendProc.kill();
+        backendProc = null;
+    }
 });
 
 app.on('activate', () => {

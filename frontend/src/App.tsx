@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import AvatarFace, { AvatarState } from './components/AvatarFace';
 import AvatarOverlay from './components/AvatarOverlay';
 
 // ─── Detect window mode ────────────────────────────────────────────────────────
@@ -49,7 +48,6 @@ export default function App() {
 function ChatApp() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
-    const [avatarState, setAvatar] = useState<AvatarState>('idle');
     const [isListening, setListening] = useState(false);
     const [status, setStatus] = useState<'connecting' | 'ok' | 'error'>('connecting');
     const [statusText, setStatusText] = useState('Connecting…');
@@ -93,13 +91,25 @@ function ChatApp() {
             ws.onmessage = (e) => {
                 const data = JSON.parse(e.data);
                 if (data.event === 'state') {
-                    setAvatar(data.state as AvatarState);
                     setListening(data.state === 'listening');
                 }
                 if (data.event === 'transcript') { addMessage('user', data.text); addTypingIndicator(); }
+                if (data.event === 'wake_command') {
+                    // Backend passive listener detected "Hey Kyra" + command
+                    addMessage('user', data.text);
+                    addTypingIndicator();
+                    // Tell backend to process — re-use voice_command action
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ action: 'voice_command', message: data.text }));
+                    }
+                }
+                if (data.event === 'wakeword') {
+                    // Wake word heard, now waiting for command
+                    setListening(true);
+                }
                 if (data.event === 'response') { removeTypingIndicator(); addMessage('kyra', data.text); }
-                if (data.event === 'error') { removeTypingIndicator(); setAvatar('idle'); setListening(false); }
-                if (data.event === 'reset') { setMessages([]); setAvatar('idle'); }
+                if (data.event === 'error') { removeTypingIndicator(); setListening(false); }
+                if (data.event === 'reset') { setMessages([]); }
             };
 
             ws.onclose = () => { setTimeout(connect, 3000); };
@@ -129,7 +139,6 @@ function ChatApp() {
         setInput('');
         addMessage('user', msg);
         addTypingIndicator();
-        setAvatar('thinking');
         try {
             const res = await fetch(`${BACKEND_URL}/chat`, {
                 method: 'POST',
@@ -139,19 +148,18 @@ function ChatApp() {
             const data = await res.json();
             removeTypingIndicator();
             addMessage('kyra', data.response);
-            setAvatar('talking');
-            setTimeout(() => setAvatar('idle'), 2500);
         } catch {
             removeTypingIndicator();
             addMessage('kyra', 'Sorry, I could not reach the backend. Is the server running?');
-            setAvatar('idle');
         }
     };
 
-    // Voice
+    // Voice (Backend STT driven)
     const toggleVoice = () => {
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-        if (!isListening) wsRef.current.send(JSON.stringify({ action: 'listen' }));
+        if (!isListening) {
+            wsRef.current.send(JSON.stringify({ action: 'listen' }));
+        }
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -171,20 +179,9 @@ function ChatApp() {
 
     const clearChat = async () => {
         try { await fetch(`${BACKEND_URL}/reset`, { method: 'POST' }); } catch { /* ignore */ }
-        setMessages([]); setAvatar('idle');
+        setMessages([]);
     };
 
-    const stateLabel = {
-        idle: 'Idle',
-        neutral: 'Neutral',
-        listening: '● Listening',
-        thinking: '⟳ Thinking',
-        talking: '▶ Speaking',
-        happy: '😊 Happy',
-        sad: '😢 Sad',
-        angry: '😠 Angry',
-        surprised: '😲 Surprised',
-    }[avatarState] ?? 'Idle';
 
 
 
@@ -194,6 +191,7 @@ function ChatApp() {
             <div className="title-bar">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span className="title-bar-name">KYRA</span>
+                    <button onClick={clearChat} className="clear-btn">Clear</button>
                 </div>
                 {elec && (
                     <div className="window-controls">
@@ -206,30 +204,6 @@ function ChatApp() {
 
             {/* ── Main Body ── */}
             <div className="main-body">
-                {/* ── Avatar ── */}
-                <div className="avatar-panel">
-                    <div className="kyra-logo">KYRA</div>
-                    <div className="avatar-wrapper">
-                        <AvatarFace state={avatarState} />
-                    </div>
-                    <div className="avatar-state-label">{stateLabel}</div>
-
-                    <button
-                        onClick={clearChat}
-                        style={{
-                            marginTop: 8, background: 'transparent',
-                            border: '1px solid var(--border)', borderRadius: 8,
-                            padding: '6px 18px', color: 'var(--text-secondary)',
-                            fontSize: 12, cursor: 'pointer', transition: 'all 0.2s',
-                            fontFamily: 'var(--font)',
-                        }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--accent)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--accent)'; }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'; }}
-                    >
-                        Clear Chat
-                    </button>
-                </div>
-
                 {/* ── Chat ── */}
                 <div className="chat-panel">
                     <div className="chat-messages">
@@ -237,8 +211,8 @@ function ChatApp() {
                             <div className="chat-empty">
                                 <div className="chat-empty-icon">✨</div>
                                 <div className="chat-empty-text">
-                                    Say hello to KYRA!<br />
-                                    Type below or press <strong>Space</strong> to speak.
+                                    Say <strong>"Hey Kyra"</strong> to wake me up!<br />
+                                    Or type below · press <strong>Space</strong> to speak.
                                 </div>
                             </div>
                         ) : (

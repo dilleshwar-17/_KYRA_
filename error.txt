@@ -1,0 +1,77 @@
+At C:\Users\srira\OneDrive\De
+sktop\MINI_Project_folders\ja
+rvis\start.ps1:30 char:18
++         "KYRA â?" Setup 
+Required",
++                  ~
+Missing ')' in method call.
+At C:\Users\srira\OneDrive\De
+sktop\MINI_Project_folders\ja
+rvis\start.ps1:30 char:19
++         "KYRA â?" Setup 
+Required",
++                   ~~~~~
+Unexpected token 'Setup' in 
+expression or statement.
+At C:\Users\srira\OneDrive\De
+sktop\MINI_Project_folders\ja
+rvis\start.ps1:27 char:36
++ if (-not (Test-Path 
+$electronExe)) {
++                            
+        ~
+Missing closing '}' in 
+statement block or type 
+definition.
+At C:\Users\srira\OneDrive\De
+sktop\MINI_Project_folders\ja
+rvis\start.ps1:42 char:5
++     ) | Out-Null
++     ~
+Unexpected token ')' in 
+expression or statement.
+At C:\Users\srira\OneDrive\De
+sktop\MINI_Project_folders\ja
+rvis\start.ps1:42 char:7
++     ) | Out-Null
++       ~
+An empty pipe element is not 
+allowed.
+At C:\Users\srira\OneDrive\De
+sktop\MINI_Project_folders\ja
+rvis\start.ps1:44 char:1
++ }
++ ~
+Unexpected token '}' in 
+expression or statement.
+At C:\Users\srira\OneDrive\De
+sktop\MINI_Project_folders\ja
+rvis\start.ps1:102 char:18
++         "KYRA â?" Startup 
+Failed",
++                  ~
+Missing ')' in method call.
+At C:\Users\srira\OneDrive\De
+sktop\MINI_Project_folders\ja
+rvis\start.ps1:102 char:19
++         "KYRA â?" Startup 
+Failed",
++                   ~~~~~~~
+Unexpected token 'Startup' 
+in expression or statement.
+At C:\Users\srira\OneDrive\De
+sktop\MINI_Project_folders\ja
+rvis\start.ps1:98 char:18
++ if (-not $ready) {
++                  ~
+Missing closing '}' in 
+statement block or type 
+definition.
+    + CategoryInfo           
+   : ParserError: (:) [], P  
+  arentContainsErrorRecord   
+ Exception
+    + FullyQualifiedErrorId  
+   : MissingEndParenthesisI  
+  nMethodCall
+ 

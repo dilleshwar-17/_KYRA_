@@ -1,25 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import AvatarFace, { AvatarState } from './AvatarFace';
-
-// Map DeepFace emotions → AvatarState
-const EMOTION_MAP: Record<string, AvatarState> = {
-    happy: 'happy',
-    sad: 'sad',
-    angry: 'angry',
-    surprise: 'surprised',
-    surprised: 'surprised',
-    neutral: 'idle',
-    fear: 'idle',
-    disgust: 'idle',
-};
+import KyraSpriteAvatar, { AvatarState as SpriteState } from './KyraSpriteAvatar';
 
 const WS_URL = 'ws://localhost:8000/ws';
 const EXPR_WS_URL = 'ws://localhost:8000/ws/expression';
 
 export default function AvatarOverlay() {
-    const [avatarState, setAvatar] = useState<AvatarState>('idle');
+    const [avatarState, setAvatar] = useState<SpriteState>('idle');
     const [expression, setExpr] = useState<string>('neutral');
-    const [kyraState, setKyraState] = useState<AvatarState>('idle');  // KYRA's own state (talking etc.)
+    const [mood, setMood] = useState<string>('calm');
+    const [sentiment, setSentiment] = useState<number>(0);
+    const [kyraState, setKyraState] = useState<SpriteState>('idle');
     const [isDragging, setDragging] = useState(false);
     const dragStart = useRef<{ x: number; y: number } | null>(null);
 
@@ -37,12 +27,16 @@ export default function AvatarOverlay() {
                 try {
                     const data = JSON.parse(e.data);
                     if (data.expression) {
-                        const mapped = EMOTION_MAP[data.expression] ?? 'idle';
                         setExpr(data.expression);
-                        // Only override avatar if KYRA isn't talking/thinking
+                        // Also map some expressions to mood
+                        if (data.expression === 'happy') setMood('excited');
+                        else if (data.expression === 'angry') setMood('upset');
+                        else setMood('calm');
+
+                        // Only override avatar state if KYRA isn't talking/thinking
                         setKyraState(currentKyra => {
-                            if (currentKyra === 'talking' || currentKyra === 'thinking') return currentKyra;
-                            setAvatar(mapped);
+                            if (currentKyra === 'talking' || currentKyra === 'thinking' || currentKyra === 'listening') return currentKyra;
+                            setAvatar('idle'); // We now use userExpression prop for face, avatarState for body/glow
                             return currentKyra;
                         });
                     }
@@ -57,7 +51,7 @@ export default function AvatarOverlay() {
         return () => { ws?.close(); clearTimeout(retry); };
     }, []);
 
-    // ── KYRA state via electron IPC (expression:update from main.js) ─────────
+    // ── KYRA state via WebSocket ─────────────────────────────────────────────
     useEffect(() => {
         const kyraWs = new WebSocket(WS_URL);
 
@@ -65,34 +59,27 @@ export default function AvatarOverlay() {
             try {
                 const data = JSON.parse(e.data);
                 if (data.event === 'state') {
-                    const s = data.state as AvatarState;
+                    const s = data.state as SpriteState;
                     setKyraState(s);
-                    // KYRA states override expression states
-                    if (s === 'talking' || s === 'thinking' || s === 'listening') {
-                        setAvatar(s);
-                    } else {
-                        // Return to expression-based state
-                        setAvatar(EMOTION_MAP[expression] ?? 'idle');
-                    }
+                    setAvatar(s);
+                }
+                if (data.event === 'sentiment') {
+                    setSentiment(data.score || 0);
+                    if (data.score > 0.4) setMood('excited');
+                    else if (data.score < -0.4) setMood('upset');
                 }
             } catch { /* ignore */ }
         };
 
         kyraWs.onclose = () => { };
         return () => kyraWs.close();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [expression]);
+    }, []);
 
-    // ── Electron expression IPC (forwarded from backend via main process) ────
+    // ── Electron expression IPC (fallback) ──────────────────────────────────
     useEffect(() => {
         if (!elec?.onExpression) return;
         elec.onExpression((emotion: string) => {
-            const mapped = EMOTION_MAP[emotion] ?? 'idle';
             setExpr(emotion);
-            setAvatar(prev =>
-                (prev === 'talking' || prev === 'thinking' || prev === 'listening')
-                    ? prev : mapped
-            );
         });
         return () => elec.removeExpressionListener?.();
     }, [elec]);
@@ -126,16 +113,11 @@ export default function AvatarOverlay() {
 
 
     // ── Glow colour per state ────────────────────────────────────────────────
-    const glowMap: Record<AvatarState, string> = {
+    const glowMap: Record<SpriteState, string> = {
         idle: '#00dcff',
         listening: '#ff4d6d',
         thinking: '#f7c94b',
         talking: '#00e5a0',
-        happy: '#ffd700',
-        sad: '#6699cc',
-        angry: '#ff4444',
-        surprised: '#ff9f43',
-        neutral: '#aaaaaa',
     };
     const glow = glowMap[avatarState] ?? '#00dcff';
 
@@ -165,7 +147,13 @@ export default function AvatarOverlay() {
                 filter: `drop-shadow(0 0 20px ${glow}) drop-shadow(0 0 40px ${glow}55)`,
                 transition: 'filter 0.4s ease',
             }}>
-                <AvatarFace state={avatarState} size={200} />
+                <KyraSpriteAvatar 
+                    state={avatarState} 
+                    userExpression={expression}
+                    userMood={mood}
+                    voiceSentiment={sentiment}
+                    size={200} 
+                />
             </div>
 
             {/* State label */}
