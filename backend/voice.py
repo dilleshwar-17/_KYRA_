@@ -1,59 +1,71 @@
 """
 KYRA - Voice Module
-Speech-to-Text (microphone input) and Text-to-Speech (pyttsx3 output).
-Gracefully handles missing PyAudio — falls back to text-only mode.
+Speech-to-Text (microphone input) and Text-to-Speech (edge-tts output).
+Uses Microsoft's neural voices via edge-tts, with Windows Media Player for playback.
 """
 import threading
+import asyncio
+import tempfile
+import os
+import subprocess
 
-# ─── TTS Setup ────────────────────────────────────────────────────────────────
+# ─── TTS Setup (edge-tts + Windows built-in playback) ─────────────────────────
 
-def _get_tts_engine():
-    """Factory to get/init TTS engine safely."""
-    try:
-        import pyttsx3
-        engine = pyttsx3.init()
-        
-        # Basic configuration
-        engine.setProperty("rate", 165)
-        engine.setProperty("volume", 1.0)
-        
-        voices = engine.getProperty("voices")
-        selected_id = None
-        
-        # Priority 1: Zira
-        for v in voices:
-            if "zira" in v.name.lower():
-                selected_id = v.id
-                break
-        
-        # Priority 2: Other female voices
-        if not selected_id:
-            for v in voices:
-                if any(k in v.name.lower() for k in ("female", "hazel", "susan", "eva", "karen", "samantha")):
-                    selected_id = v.id
-                    break
-        
-        if selected_id:
-            engine.setProperty("voice", selected_id)
-            
-        return engine
-    except Exception as e:
-        print(f"[WARNING] TTS init failed: {e}")
-        return None
+_EDGE_TTS_VOICE = "en-US-AriaNeural"   # High-quality, natural-sounding female voice
+_EDGE_TTS_RATE  = "+0%"               # Normal speed (use "+10%" to be faster)
+_EDGE_TTS_PITCH = "+0Hz"              # Normal pitch
+
+try:
+    import edge_tts as _edge_tts
+    _tts_available = True
+    print(f"[OK] TTS (edge-tts / {_EDGE_TTS_VOICE}) ready")
+except ImportError:
+    _tts_available = False
+    print("[WARNING] edge-tts not installed — TTS disabled. Run: pip install edge-tts")
+
+
+async def _generate_audio(text: str, output_path: str):
+    """Generate mp3 audio from text using edge-tts."""
+    communicate = _edge_tts.Communicate(text, _EDGE_TTS_VOICE, rate=_EDGE_TTS_RATE, pitch=_EDGE_TTS_PITCH)
+    await communicate.save(output_path)
+
 
 def speak(text: str):
-    """Convert text to speech (blocking). Initializes engine per call for thread safety."""
-    engine = _get_tts_engine()
-    if engine is None:
+    """Convert text to speech (blocking). Uses edge-tts to generate then plays via PowerShell."""
+    if not _tts_available:
         print(f"[TTS disabled] {text}")
         return
+    
+    tmp_path = None
     try:
-        engine.say(text)
-        engine.runAndWait()
-        # Clean up to avoid COM leaks
-        del engine
+        # Step 1: Generate audio file
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+            tmp_path = f.name
+        
+        asyncio.run(_generate_audio(text, tmp_path))
+        
+        # Step 2: Play via PowerShell (Windows Media Player COM object — works without any extra libs)
+        ps_cmd = (
+            f"$player = New-Object System.Windows.Media.MediaPlayer; "
+            f"$player.Open([System.Uri]::new('{tmp_path}')); "
+            f"Start-Sleep -Milliseconds 500; "
+            f"$player.Play(); "
+            f"$dur = (Get-Item '{tmp_path}').Length / 16000; "
+            f"Start-Sleep -Seconds ([Math]::Max(2, $dur)); "
+            f"$player.Close();"
+        )
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps_cmd],
+            capture_output=True, timeout=60
+        )
     except Exception as e:
-        print(f"TTS error: {e}")
+        print(f"[TTS error] {e}")
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
 
 
 def speak_async(text: str):
