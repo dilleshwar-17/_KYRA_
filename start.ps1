@@ -16,7 +16,7 @@ $mainJs      = Join-Path $frontendDir "electron\main.js"
 # -- Clean up old instances silently --------------------------
 Get-Process -Name "electron" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
-5173..5180 | ForEach-Object {
+5173..5180 + 8080..8090 | ForEach-Object {
     $procId = (Get-NetTCPConnection -LocalPort $_ -ErrorAction SilentlyContinue).OwningProcess
     if ($procId) { Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue }
 }
@@ -24,12 +24,13 @@ Get-Process -Name "electron" -ErrorAction SilentlyContinue | Stop-Process -Force
 Add-Type -AssemblyName System.Windows.Forms
 
 # -- Validate required files -----------------------------------
+# -- Validate required files -----------------------------------
 if (-not (Test-Path $electronExe)) {
-    [System.Windows.Forms.MessageBox]::Show("Electron not found. Please run:`n  cd frontend && npm install", "KYRA - Setup Required", 0, 16) | Out-Null
+    [System.Windows.Forms.MessageBox]::Show("Electron not found. Please run:`n  cd frontend && npm install", "KYRA AI - Setup Required", 0, 16) | Out-Null
     exit 1
 }
 if (-not (Test-Path $mainJs)) {
-    [System.Windows.Forms.MessageBox]::Show("electron\main.js not found at:`n$mainJs", "KYRA - Error", 0, 16) | Out-Null
+    [System.Windows.Forms.MessageBox]::Show("electron\main.js not found at:`n$mainJs", "KYRA AI - Error", 0, 16) | Out-Null
     exit 1
 }
 
@@ -70,12 +71,19 @@ function Start-Hidden {
 
 # -- 1. Start Vite dev server (hidden) ------------------------
 $viteProc = Start-Hidden -Exe "cmd.exe" `
-    -Arguments "/c npm run dev" `
+    -Arguments "/c npm run dev > vite_log.txt 2>&1" `
     -WorkDir $frontendDir
 
-# -- 2. Wait for Vite to respond (up to 45 s) -----------------
+# -- 1b. Start KYRA Backend (hidden) --------------------------
+$pythonExe = Join-Path $root "python-portable\python.exe"
+$backendDir = Join-Path $root "backend"
+$backendProc = Start-Hidden -Exe "cmd.exe" `
+    -Arguments "/c `"$pythonExe`" main.py > backend_log.txt 2>&1" `
+    -WorkDir $backendDir
+
+# -- 2. Wait for Vite to respond (up to 90 s) -----------------
 $ready = $false
-for ($i = 0; $i -lt 45; $i++) {
+for ($i = 0; $i -lt 90; $i++) {
     try {
         Invoke-WebRequest "http://localhost:5173" -UseBasicParsing -TimeoutSec 1 | Out-Null
         $ready = $true
@@ -86,8 +94,9 @@ for ($i = 0; $i -lt 45; $i++) {
 }
 
 if (-not $ready) {
-    [System.Windows.Forms.MessageBox]::Show("Vite dev server did not start in 45 seconds.`nCheck that node_modules is installed:`n  cd frontend && npm install", "KYRA - Startup Failed", 0, 16) | Out-Null
+    [System.Windows.Forms.MessageBox]::Show("Startup timed out at 90s.`nCheck vite_log.txt and backend_log.txt.", "KYRA AI - Error", 0, 16) | Out-Null
     if ($viteProc -and !$viteProc.HasExited) { $viteProc.Kill() }
+    if ($backendProc -and !$backendProc.HasExited) { $backendProc.Kill() }
     exit 1
 }
 
@@ -108,9 +117,12 @@ $electronProc = [System.Diagnostics.Process]::Start($electronInfo)
 # -- 4. Wait for Electron to exit, then clean up ---------------
 $electronProc.WaitForExit()
 
-# Kill the hidden Vite process when Electron closes
+# Kill the hidden processes when Electron closes
 if ($viteProc -and !$viteProc.HasExited) {
     $viteProc.Kill()
+}
+if ($backendProc -and !$backendProc.HasExited) {
+    $backendProc.Kill()
 }
 # Kill any leftover electron / node processes on Vite port
 Get-Process -Name "electron" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue

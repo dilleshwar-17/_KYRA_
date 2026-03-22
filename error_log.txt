@@ -1,0 +1,31 @@
+C:\Users\srira\OneDrive\Desktop\MINI_Project_folders\KYRA\backend\main.py:109: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  @app.on_event("startup")
+C:\Users\srira\OneDrive\Desktop\MINI_Project_folders\KYRA\backend\main.py:134: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  @app.on_event("shutdown")
+INFO:     Started server process [28248]
+INFO:     Waiting for application startup.
+Using cache found in C:\Users\srira/.cache\torch\hub\snakers4_silero-vad_master
+INFO:kyra:Wake word listener started.
+INFO:kyra:[OK] News Worker started in background
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)
+Starting KYRA backend on http://0.0.0.0:8080
+Loaded .env from: C:\Users\srira\OneDrive\Desktop\MINI_Project_folders\KYRA\backend\.env
+[OK] KYRA Engine ready ù OpenAI / gpt-4o-mini (History loaded: 20 msgs)
+[OK] KYRA Engine ready ù SambaNova / Meta-Llama-3.1-8B-Instruct
+[OK] Wake word listener (sounddevice) ready
+[INFO] Loading VAD model for wake word...
+[INFO] Passive wake-word listener started ù say 'Hey Kyra'!
+[INFO] Wake-word SR: 16000, Device: None
+INFO:     127.0.0.1:52138 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62977 - "GET /health HTTP/1.1" 200 OK

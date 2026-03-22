@@ -1,7 +1,6 @@
 /**
  * KYRA – Electron Main Process
  *
- * Two windows:
  *   1. avatarWin  – tiny, frameless, transparent, always-on-top floating avatar
  *   2. chatWin    – full chat UI, opened on demand via right-click or tray
  *
@@ -73,15 +72,24 @@ function startBackend() {
     }
 
     console.log(`Spawning backend: ${cmd} ${args.join(' ')}`);
-    backendProc = spawn(cmd, args, {
-        cwd,
-        env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
-        // 'ignore' avoids EPIPE when no terminal is attached (e.g. launched via .bat)
-        stdio: 'ignore',
-        detached: false,
-    });
-
-    backendProc.on('exit', code => console.log(`Backend process exited with code: ${code}`));
+    
+    // Check if port 8080 is already taken (backend already running via start.ps1)
+    const net = require('net');
+    const portScanner = net.createServer().once('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+            console.log('[KYRA] Backend already running on port 8091, skipping spawn.');
+            return;
+        }
+    }).once('listening', () => {
+        portScanner.close();
+        backendProc = spawn(cmd, args, {
+            cwd,
+            env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+            stdio: isDev ? 'inherit' : 'ignore',
+            detached: false,
+        });
+        backendProc.on('exit', code => console.log(`Backend process exited with code: ${code}`));
+    }).listen(8091);
 }
 
 // ─── Avatar Window ────────────────────────────────────────────────────────────
@@ -162,8 +170,14 @@ function createChatWindow() {
         });
     }
 
-    chatWin.once('ready-to-show', () => chatWin.show());
-    chatWin.on('closed', () => { chatWin = null; });
+    chatWin.once('ready-to-show', () => {
+        chatWin.show();
+        if (avatarWin && !avatarWin.isDestroyed()) avatarWin.hide();
+    });
+    chatWin.on('closed', () => { 
+        chatWin = null; 
+        if (avatarWin && !avatarWin.isDestroyed()) avatarWin.show();
+    });
 }
 
 // ─── Auto-start (Windows Registry via Electron) ────────────────────────────────
@@ -227,7 +241,7 @@ function buildTrayMenu() {
             },
         },
         { type: 'separator' },
-        { label: '✕ Quit KYRA', click: () => app.quit() },
+        { label: '✕ Quit KYRA AI', click: () => app.quit() },
     ]);
     tray.setContextMenu(menu);
 }
@@ -249,8 +263,26 @@ function setupIPC() {
     // Drag avatar window
     ipcMain.on('avatar:drag', (_, { dx, dy }) => {
         if (!avatarWin || avatarWin.isDestroyed()) return;
-        const [x, y] = avatarWin.getPosition();
-        avatarWin.setPosition(x + Math.round(dx), y + Math.round(dy));
+        const bounds = avatarWin.getBounds();
+        avatarWin.setBounds({
+            x: bounds.x + Math.round(dx),
+            y: bounds.y + Math.round(dy),
+            width: 280,
+            height: 320
+        });
+    });
+
+    // Avatar context menu
+    ipcMain.on('avatar:menu', () => {
+        const menu = Menu.buildFromTemplate([
+            { label: 'Minimize', click: () => avatarWin && !avatarWin.isDestroyed() && avatarWin.minimize() },
+            { label: 'Settings', click: () => { if (chatWin && !chatWin.isDestroyed()) { chatWin.focus(); } else { createChatWindow(); } } },
+            { type: 'separator' },
+            { label: 'Close', click: () => app.quit() }
+        ]);
+        if (avatarWin && !avatarWin.isDestroyed()) {
+            menu.popup({ window: avatarWin });
+        }
     });
 
     // Toggle click-through on transparent parts

@@ -16,13 +16,12 @@ const AvatarFace: React.FC<AvatarFaceProps> = ({ state, size = 180 }) => {
     const [eyeScale, setEyeScale] = React.useState(1);
 
     React.useEffect(() => {
-        if (state !== 'talking') { setEyeScale(1); return; }
         const id = setInterval(() => {
             setEyeScale(0.1);
             setTimeout(() => setEyeScale(1), 120);
-        }, 2400);
+        }, 2400 + Math.random() * 2000);
         return () => clearInterval(id);
-    }, [state]);
+    }, []);
 
     // ── Surprised wide-eye scale ─────────────────────────────────────────────
     const eyeRy = state === 'surprised' ? 14 : 11 * eyeScale;

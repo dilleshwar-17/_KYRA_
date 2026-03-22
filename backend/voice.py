@@ -9,7 +9,16 @@ import tempfile
 import os
 import subprocess
 
-# ─── TTS Setup (edge-tts + Windows built-in playback) ─────────────────────────
+try:
+    import pygame
+    # Initialize pygame mixer
+    pygame.mixer.init()
+    _pygame_available = True
+except (ImportError, Exception) as e:
+    _pygame_available = False
+    print(f"[WARNING] pygame/audio initialization failed: {e}")
+
+# ─── TTS Setup (edge-tts) ───────────────────────────────────────────────────
 
 _EDGE_TTS_VOICE = "en-US-AriaNeural"   # High-quality, natural-sounding female voice
 _EDGE_TTS_RATE  = "+0%"               # Normal speed (use "+10%" to be faster)
@@ -31,37 +40,35 @@ async def _generate_audio(text: str, output_path: str):
 
 
 def speak(text: str):
-    """Convert text to speech (blocking). Uses edge-tts to generate then plays via PowerShell."""
-    if not _tts_available:
+    """
+    Convert text to speech (blocking) using edge-tts and pygame.
+    """
+    if os.getenv("KYRA_SKIP_BACKEND_TTS", "false").lower() == "true":
+        print(f"[Backend TTS Skipped] {text}")
+        return
+
+    if not _tts_available or not _pygame_available:
         print(f"[TTS disabled] {text}")
         return
     
     tmp_path = None
     try:
-        # Step 1: Generate audio file
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
             tmp_path = f.name
         
         asyncio.run(_generate_audio(text, tmp_path))
         
-        # Step 2: Play via PowerShell (Windows Media Player COM object — works without any extra libs)
-        ps_cmd = (
-            f"$player = New-Object System.Windows.Media.MediaPlayer; "
-            f"$player.Open([System.Uri]::new('{tmp_path}')); "
-            f"Start-Sleep -Milliseconds 500; "
-            f"$player.Play(); "
-            f"$dur = (Get-Item '{tmp_path}').Length / 16000; "
-            f"Start-Sleep -Seconds ([Math]::Max(2, $dur)); "
-            f"$player.Close();"
-        )
-        subprocess.run(
-            ["powershell", "-NoProfile", "-Command", ps_cmd],
-            capture_output=True, timeout=60
-        )
+        if os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 0:
+            pygame.mixer.music.load(tmp_path)
+            pygame.mixer.music.play()
+            while pygame.mixer.music.get_busy():
+                pygame.time.Clock().tick(10)
     except Exception as e:
-        print(f"[TTS error] {e}")
+        print(f"[TTS Error] {e}")
     finally:
         if tmp_path and os.path.exists(tmp_path):
+            # Wait a bit before deleting to ensure playback is fully complete
+            pygame.time.wait(500)
             try:
                 os.remove(tmp_path)
             except Exception:
@@ -103,7 +110,7 @@ try:
     
     # Setup SambaNova Client
     from dotenv import load_dotenv
-    load_dotenv(dotenv_path="backend/.env")
+    load_dotenv(dotenv_path=".env")
     _sambanova_api_key = os.getenv("SAMBANOVA_API_KEY")
     if _sambanova_api_key:
         _openai_client = OpenAI(api_key=_sambanova_api_key, base_url="https://api.sambanova.ai/v1")
@@ -119,15 +126,12 @@ except Exception as e:
 
 
 def _get_supported_info(device_id=None):
-    """Detect working samplerate and channels for the given device."""
-    rates = [44100, 48000, 16000]
-    for sr_val in rates:
-        try:
-            sd.check_input_settings(device=device_id, samplerate=sr_val, channels=1)
-            return sr_val, 1
-        except Exception:
-            continue
-    return 16000, 1  # Fallback
+    """Detect working samplerate and channels for the given device. Silero VAD requires 16000 Hz."""
+    try:
+        sd.check_input_settings(device=device_id, samplerate=16000, channels=1)
+        return 16000, 1
+    except Exception:
+        return 16000, 1  # Fallback
 
 
 def listen(timeout: int = 4) -> "str | None":
@@ -161,7 +165,8 @@ def listen(timeout: int = 4) -> "str | None":
         fs, channels = _get_supported_info(device_id)
         print(f"[INFO] Active Listening (SR: {fs}, Device: {device_id})...")
 
-        vad_iterator = VADIterator(_vad_model)
+        # Lower threshold to 0.15 for laptop mics/quieter distances
+        vad_iterator = VADIterator(_vad_model, threshold=0.15)
         chunk_size = 512
         buffer = []
         is_speaking = False
@@ -170,31 +175,36 @@ def listen(timeout: int = 4) -> "str | None":
         # Read up to `timeout` seconds waiting for speech to start, otherwise stop.
         # Once speech starts, continue until it stops.
         max_silent_chunks = int((timeout * fs) / chunk_size)
-        silent_chunks = 0
+        _silent_count: int = 0
 
-        with sd.InputStream(samplerate=fs, channels=1, blocksize=chunk_size, device=device_id) as stream:
-            while True:
-                audio_chunk, overflowed = stream.read(chunk_size)
-                audio_float32 = audio_chunk[:, 0].astype(np.float32)
-                audio_tensor = torch.from_numpy(audio_float32)
-                
-                speech_dict = vad_iterator(audio_tensor, return_seconds=True)
-                
-                if speech_dict and 'start' in speech_dict:
-                    is_speaking = True
-                    speech_detected_ever = True
-                    buffer = [audio_float32]
+        try:
+            with sd.InputStream(samplerate=fs, channels=1, blocksize=chunk_size, device=device_id) as stream:
+                while True:
+                    audio_chunk, overflowed = stream.read(chunk_size)
+                    audio_float32 = audio_chunk[:, 0].astype(np.float32)
+                    audio_tensor = torch.from_numpy(audio_float32)
                     
-                if is_speaking:
-                    buffer.append(audio_float32)
-                else:
-                    silent_chunks += 1
-                    if not speech_detected_ever and silent_chunks > max_silent_chunks:
-                        print("[INFO] Listen timeout. No speech detected.")
-                        return None
+                    speech_dict = vad_iterator(audio_tensor, return_seconds=True)
                     
-                if speech_dict and 'end' in speech_dict:
-                    break
+                    if speech_dict and 'start' in speech_dict:
+                        is_speaking = True
+                        speech_detected_ever = True
+                        buffer = [audio_float32]
+                        
+                    if is_speaking:
+                        buffer.append(audio_float32)
+                    else:
+                        _silent_count = _silent_count + 1
+                        if not speech_detected_ever and _silent_count > max_silent_chunks:
+                            print("[INFO] Listen timeout. No speech detected.")
+                            return None
+                        
+                    if speech_dict and 'end' in speech_dict:
+                        break
+        except Exception as e:
+            print(f"[ERROR] Could not open microphone device {device_id}: {e}")
+            print("[TIP] Run 'python backend/configure_mic.py' to select a working microphone.")
+            return None
 
         if not buffer:
              return None
@@ -203,7 +213,7 @@ def listen(timeout: int = 4) -> "str | None":
 
         # ── Audio Pre-processing (Normalization) ──────────────────────────────
         max_val = np.max(np.abs(audio_raw))
-        if max_val > 0:
+        if max_val > 0.0001: # Prevent amplifying pure digital silence
             audio_raw = audio_raw / max_val * 0.9 # Normalize to 90% peak
         
         # Convert to int16 for WAV saving

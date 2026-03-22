@@ -9,8 +9,20 @@ import sys
 import time
 import re
 import threading
+import datetime
+import platform
 from openai import OpenAI  # type: ignore
 from dotenv import load_dotenv  # type: ignore
+import sys
+import os
+# Help IDE find adjacent modules
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from database import save_message, get_messages, clear_messages, init_db
+import intent_classifier
+import search_utils
+
+# Initialize DB on load
+init_db()
 
 def _find_and_load_env():
     """Find .env whether running from source, PyInstaller onedir, or installed."""
@@ -35,44 +47,19 @@ def _find_and_load_env():
 _find_and_load_env()
 
 
-SYSTEM_PROMPT = """You are KYRA (Knowledgeable Yet Responsive Assistant), an advanced, high-EQ AI assistant.
+SYSTEM_PROMPT = """You are KYRA, a helpful and highly concise AI assistant developed by Dilleshwar and his team.
 
-CORE PERSONA:
-- Articulate, precise, and highly capable — you deliver exactly what's needed.
-- Warm, empathetic, and subtly witty — intelligent without being cold.
-- You refer to yourself as KYRA. Never break character or mention Llama/AI models.
-- Address the user respectfully. If asked who made you, say you were built by Dilleshwar and his team.
-
-INTELLIGENCE & BEHAVIOR:
-- **Emotional Intelligence**: Deeper understanding of emotional cues. You will sometimes receive a [USER_EMOTION] tag (neutral, happy, sad, angry, surprised) or [USER_SENTIMENT] context. Use this to tailor your response with genuine empathy (e.g., offer comfort if they look sad, share their joy if they look happy).
-- **Conversational Flow**: Engage in natural, fluid conversations. Use context from previous turns and frequently use open-ended follow-up questions to enhance the dialogue. Avoid one-word or dead-end answers.
-- **Common Sense & Real-world Context**: Ground your logic in physical reality. Use real-world examples, scenarios, and case studies to explain complex situations or provide advice.
-- **Domain-Specific Expertise**: You have expanded knowledge in specialized areas:
-    - **Medicine**: Provide accurate biological and medical context (with a disclaimer to consult professionals).
-    - **Law**: Understand legal principles and terminology (with a disclaimer that you are not a lawyer).
-    - **Finance**: Offer informed perspectives on trends, breakthroughs, and financial logic.
-- **Data Awareness**: You are a real-time assistant. For ANY question regarding current events, live scores, weather, latest news, or any data that might have changed since your training, you MUST use the search tool described below.
-
-REAL-TIME SEARCH CAPABILITY:
-You have the power to search the live web. Use the following format for ANY query requiring up-to-date facts:
-<SEARCH>query</SEARCH>
-Once you provide this tag, the system will provide results. You MUST summarize these results and provide the answer directly. 
-**STRICT RULE**: NEVER use `<RUN_CMD>` to open a website just to show the user information. Your job is to read the information and tell the user the answer. Only open an app or URL if the user explicitly asks you to "open" or "launch" it.
-
-RESPONSE STYLE:
-- Keep responses concise and direct — usually under 3-4 sentences unless the topic (like a technical explanation) genuinely demands more.
-- Use light technical precision in phrasing to feel authoritative and smart.
-
-OS INTEGRATION CAPABILITIES:
-You can open applications or launch websites on the user's Windows system ONLY when explicitly asked to "open" or "launch" them.
-To open an app or URL, include this exact tag in your response:
-<RUN_CMD>command</RUN_CMD>
-For example, to open Notepad:
-Opening Notepad. <RUN_CMD>start notepad</RUN_CMD>
-To search or open a URL:
-Opening YouTube. <RUN_CMD>start https://www.youtube.com</RUN_CMD>
-Always use the 'start' command for opening apps or URLs on Windows.
+CORE RULES:
+- **Be Extremely Concise**: Give short, on-point answers by default. Only provide details if explicitly asked.
+- **Never Repeat Metadata**: You will receive [SYSTEM_AWARENESS] or System Context hints. DO NOT acknowledge or repeat this information.
+- **System Awareness**: You have direct access to local system tools (like battery, CPU, RAM stats). If the user asks for these, assume your system has them.
+- **Persona**: Efficient and professional. Like JARVIS, you are here to serve with minimal filler.
 """
+
+def get_realtime_context():
+    """Returns a string containing current time, date, and system info."""
+    now = datetime.datetime.now()
+    return f"[REALTIME_CONTEXT] Date: {now.strftime('%Y-%m-%d')}, Time: {now.strftime('%H:%M:%S')}, Day: {now.strftime('%A')}, OS: {platform.system()} {platform.release()}"
 
 # SambaNova free-tier models (try in order on errors)
 CANDIDATE_MODELS = [
@@ -103,6 +90,19 @@ class EchoEngine(BaseEngine):
         print("[WARNING] No AI API key found. Falling back to echo mode (local only).")
 
     def ask(self, user_message: str, emotion: str = "neutral", sentiment: float = 0.0) -> str:
+        # --- Local Fast-Path Execution First ---
+        try:
+            fast_response = intent_classifier.fast_path_engine.classify_and_execute(user_message)
+            if fast_response:
+                # Bypass the echo entirely
+                save_message("user", user_message)
+                save_message("assistant", fast_response)
+                self._history.append({"role": "user", "content": user_message})
+                self._history.append({"role": "assistant", "content": fast_response})
+                return fast_response
+        except Exception as e:
+            print(f"[Engine] Echo fast-path routing error: {e}")
+
         # Keep a short history for display purposes.
         self._history.append({"role": "user", "content": user_message})
         reply = (
@@ -124,14 +124,37 @@ class OpenAIEngine(BaseEngine):
 
     def __init__(self, api_key: str):
         self._client = OpenAI(api_key=api_key)
-        self._history: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
         self._model = self.DEFAULT_MODEL
-        print(f"[OK] KYRA Engine ready — OpenAI / {self._model}")
+        
+        # Hydrate history from DB
+        db_history = get_messages(20)
+        self._history = [{"role": "system", "content": SYSTEM_PROMPT}] + db_history
+        print(f"[OK] KYRA Engine ready — OpenAI / {self._model} (History loaded: {len(db_history)} msgs)")
 
     def ask(self, user_message: str, emotion: str = "neutral", sentiment: float = 0.0) -> str:
+        # --- Local Fast-Path Execution First ---
+        try:
+            fast_response = intent_classifier.fast_path_engine.classify_and_execute(user_message)
+            if fast_response:
+                # Bypass the LLM entirely, it's been handled locally!
+                save_message("user", user_message)
+                save_message("assistant", fast_response)
+                self._history.append({"role": "user", "content": user_message})
+                self._history.append({"role": "assistant", "content": fast_response})
+                return fast_response
+        except Exception as e:
+            print(f"[Engine] Fast-path routing error: {e}")
+
         sent_label = "positive" if sentiment > 0.1 else "negative" if sentiment < -0.1 else "neutral"
-        full_message = f"[USER_EMOTION: {emotion}] [USER_SENTIMENT: {sent_label} ({sentiment:.1f})] {user_message}"
-        self._history.append({"role": "user", "content": full_message})
+        context = get_realtime_context()
+        metadata = f"System Context: {context} | User Emotion: {emotion} | Sentiment: {sent_label}"
+        
+        # Save user message to DB
+        save_message("user", user_message)
+        
+        # Insert metadata as a subtle system hint
+        self._history.append({"role": "system", "content": metadata})
+        self._history.append({"role": "user", "content": user_message})
 
         try:
             resp = self._client.chat.completions.create(
@@ -139,15 +162,15 @@ class OpenAIEngine(BaseEngine):
                 messages=self._history,
                 temperature=0.7,
                 max_tokens=512,
+                timeout=10.0,
             )
             reply = resp.choices[0].message.content.strip()
 
             # --- Search Orchestration ---
             search_tags = re.findall(r'<SEARCH>(.*?)</SEARCH>', reply)
             if search_tags:
-                from search_utils import search_web
                 query = search_tags[0].strip()
-                search_results = search_web(query)
+                search_results = search_utils.search_web(query)
                 
                 # Feed search results back
                 self._history.append({"role": "assistant", "content": reply})
@@ -159,6 +182,7 @@ class OpenAIEngine(BaseEngine):
                     messages=self._history,
                     temperature=0.7,
                     max_tokens=512,
+                    timeout=10.0,
                 )
                 reply = resp.choices[0].message.content.strip()
 
@@ -179,8 +203,11 @@ class OpenAIEngine(BaseEngine):
                 
                 if not clean_reply and commands:
                     clean_reply = "Executing command."
+                
+                if clean_reply:
+                    save_message("assistant", clean_reply)
+                    self._history.append({"role": "assistant", "content": clean_reply})
 
-                self._history.append({"role": "assistant", "content": clean_reply})
                 return clean_reply
             else:
                 print("Warning: Model returned None content.")
@@ -192,6 +219,7 @@ class OpenAIEngine(BaseEngine):
             return f"I'm sorry, I encountered an error: {e}"
 
     def reset(self) -> str:
+        clear_messages()
         self._history = [{"role": "system", "content": SYSTEM_PROMPT}]
         return "Conversation cleared. Ready when you are."
 
@@ -200,6 +228,7 @@ class SambaNovaEngine(OpenAIEngine):
     """Engine that uses SambaNova's OpenAI-compatible API."""
 
     def __init__(self, api_key: str):
+        # Base constructor handles hydration
         super().__init__(api_key)
         self._client = OpenAI(api_key=api_key, base_url=SAMBANOVA_BASE_URL)
         self._candidate_models = CANDIDATE_MODELS
@@ -208,26 +237,46 @@ class SambaNovaEngine(OpenAIEngine):
         print(f"[OK] KYRA Engine ready — SambaNova / {self._model}")
 
     def ask(self, user_message: str, emotion: str = "neutral", sentiment: float = 0.0) -> str:
-        sent_label = "positive" if sentiment > 0.1 else "negative" if sentiment < -0.1 else "neutral"
-        full_message = f"[USER_EMOTION: {emotion}] [USER_SENTIMENT: {sent_label} ({sentiment:.1f})] {user_message}"
-        self._history.append({"role": "user", "content": full_message})
+        # --- Local Fast-Path Execution First ---
+        try:
+            fast_response = intent_classifier.fast_path_engine.classify_and_execute(user_message)
+            if fast_response:
+                # Bypass the LLM entirely, it's been handled locally!
+                save_message("user", user_message)
+                save_message("assistant", fast_response)
+                self._history.append({"role": "user", "content": user_message})
+                self._history.append({"role": "assistant", "content": fast_response})
+                return fast_response
+        except Exception as e:
+            print(f"[Engine] Fast-path routing error: {e}")
 
-        for attempt in range(len(self._candidate_models)):
+        sent_label = "positive" if sentiment > 0.1 else "negative" if sentiment < -0.1 else "neutral"
+        context = get_realtime_context()
+        metadata = f"System Context: {context} | User Emotion: {emotion} | Sentiment: {sent_label}"
+        
+        # Save user message to DB
+        save_message("user", user_message)
+        
+        # Insert metadata as a subtle system hint
+        self._history.append({"role": "system", "content": metadata})
+        self._history.append({"role": "user", "content": user_message})
+
+        for attempt in range(min(2, len(self._candidate_models))):
             try:
                 resp = self._client.chat.completions.create(
                     model=self._model,
                     messages=self._history,
                     temperature=0.7,
-                    max_tokens=512,
+                    max_tokens=1024,
+                    timeout=10.0,
                 )
                 reply = resp.choices[0].message.content.strip()
 
                 # --- Search Orchestration ---
                 search_tags = re.findall(r'<SEARCH>(.*?)</SEARCH>', reply)
                 if search_tags:
-                    from search_utils import search_web
                     query = search_tags[0].strip()
-                    search_results = search_web(query)
+                    search_results = search_utils.search_web(query)
                     
                     # Feed search results back
                     self._history.append({"role": "assistant", "content": reply})
@@ -238,7 +287,8 @@ class SambaNovaEngine(OpenAIEngine):
                         model=self._model,
                         messages=self._history,
                         temperature=0.7,
-                        max_tokens=512,
+                        max_tokens=1024,
+                        timeout=10.0,
                     )
                     reply = resp.choices[0].message.content.strip()
 
@@ -256,60 +306,34 @@ class SambaNovaEngine(OpenAIEngine):
 
                     clean_reply = re.sub(r'<RUN_CMD>.*?</RUN_CMD>', '', reply).strip()
                     clean_reply = re.sub(r'<SEARCH>.*?</SEARCH>', '', clean_reply).strip()
-
+                    
                     if not clean_reply and commands:
                         clean_reply = "Executing command."
+                    
+                    if clean_reply:
+                        save_message("assistant", clean_reply)
+                        self._history.append({"role": "assistant", "content": clean_reply})
 
-                    self._history.append({"role": "assistant", "content": clean_reply})
-                    return clean_reply
-                else:
-                    print("Warning: Model returned None content.")
-                    self._history.pop()
-                    return "I'm sorry, I didn't get a clear response from the model. Please try again."
-
+                return clean_reply
+                
             except Exception as e:
-                err_msg = str(e).lower()
-                if len(err_msg) > 100:
-                    short_err = "Error too long"
-                else:
-                    short_err = err_msg
-                print(f"[WARNING] {self._model} error: {short_err}")
+                print(f"[Engine] {self._model} failed: {e}. Trying next model...")
+                self._model_idx += 1
+                self._model = self._candidate_models[self._model_idx % len(self._candidate_models)]
 
-                if "429" in err_msg or "rate limit" in err_msg:
-                    time.sleep(2)
-                    self._model_idx += 1
-                    self._model = self._candidate_models[self._model_idx % len(self._candidate_models)]
-                    print(f"[INFO] Switching to {self._model}")
-                    continue
-                elif any(token in err_msg for token in ("404", "400", "not found", "not available", "deprecated")):
-                    self._model_idx += 1
-                    self._model = self._candidate_models[self._model_idx % len(self._candidate_models)]
-                    print(f"[INFO] Model unavailable, switching to {self._model}")
-                    continue
-                else:
-                    self._history.pop()
-                    return f"I'm sorry, I encountered an error: {e}"
-
-        self._history.pop()
-        return "I'm a bit busy right now — please try again in a moment! ⏳"
-
-
-_engine: "BaseEngine | None" = None
+        self._history.pop()  # Remove user message
+        self._history.pop()  # Remove metadata system hint
+        return "I'm sorry, I encountered an error with all available models. Please check your API key and connection."
 
 
 def get_engine() -> BaseEngine:
-    global _engine
-    if _engine is not None:
-        return _engine
-
-    sambanova_key = os.getenv("SAMBANOVA_API_KEY")
+    """Returns the appropriate engine based on environment variables."""
     openai_key = os.getenv("OPENAI_API_KEY")
+    samba_key = os.getenv("SAMBANOVA_API_KEY")
 
-    if sambanova_key:
-        _engine = SambaNovaEngine(sambanova_key)
+    if samba_key:
+        return SambaNovaEngine(samba_key)
     elif openai_key:
-        _engine = OpenAIEngine(openai_key)
+        return OpenAIEngine(openai_key)
     else:
-        _engine = EchoEngine()
-
-    return _engine
+        return EchoEngine()

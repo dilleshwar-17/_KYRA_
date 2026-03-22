@@ -15,6 +15,9 @@ contextBridge.exposeInMainWorld('electron', {
     // Avatar dragging
     dragAvatar: (dx, dy) => ipcRenderer.send('avatar:drag', { dx, dy }),
 
+    // Avatar menu
+    showAvatarMenu: () => ipcRenderer.send('avatar:menu'),
+
     // Click-through for transparent areas
     setClickThrough: (value) => ipcRenderer.send('avatar:setClickThrough', value),
 

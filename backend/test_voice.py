@@ -1,31 +1,39 @@
+import os
+import sys
+# Ensure we can find backend modules
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+print("--- Testing TTS ---")
 try:
-    from voice import speak, listen # type: ignore
-except ImportError:
-    from backend.voice import speak, listen # type: ignore
+    from voice import speak, speak_async
+    print("[1] Testing edge-tts (Network TTS)...")
+    # Temporarily force edge-tts if available
+    speak("This is a test of the edge T T S system.")
+    time.sleep(3)
+    
+    print("[2] Testing pyttsx3 (Offline TTS)...")
+    # We can force pyttsx3 by temporarily disabling edge_tts flag in the module
+    import voice
+    original_tts = voice._tts_available
+    voice._tts_available = False
+    speak("This is a test of the offline text to speech system.")
+    voice._tts_available = original_tts
+    time.sleep(3)
+    print("[OK] TTS tests completed.")
+except Exception as e:
+    print(f"[ERROR] TTS test failed: {e}")
 
-def test_tts():
-    print("\n--- Testing Text-to-Speech ---")
-    message = "Hello, I am Kyra. Testing the text to speech system."
-    print(f"I should say: '{message}'")
-    speak(message)
-    print("TTS test complete.")
-
-def test_stt():
-    print("\n--- Testing Speech-to-Text ---")
-    print("Please say something after the microphone prompt...")
-    result = listen(timeout=5)
-    if result:
-        print(f"STT Result: Success! I heard: '{result}'")
+print("\n--- Testing STT ---")
+try:
+    from voice import listen
+    print("Please say something into the microphone now... (Listening for up to 5 seconds)")
+    text = listen(timeout=5)
+    if text:
+        print(f"[OK] STT heard: '{text}'")
+        speak(f"I heard you say: {text}")
     else:
-        print("STT Result: Failed or no audio heard.")
+        print("[WARNING] STT did not hear anything or returned None.")
+except Exception as e:
+    print(f"[ERROR] STT test failed: {e}")
 
-if __name__ == "__main__":
-    print("KYRA Voice Module Test")
-    
-    # Test TTS
-    test_tts()
-    
-    # Test STT
-    test_stt()
-    
-    print("\nTests complete.")
+print("\n--- Diagnostics Complete ---")

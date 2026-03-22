@@ -8,13 +8,12 @@
         "**/__pycache__",
         "**/*.pyc"
     ],
-    "venvPath": "C:\\Users\\srira\\OneDrive\\Desktop\\MINI_Project_folders\\jarvis",
-    "venv": ".venv",
-    "pythonVersion": "3.14",
+    "venvPath": "c:\\Users\\srira\\OneDrive\\Desktop\\MINI_Project_folders\\KYRA",
+    "venv": "python-portable",
+    "pythonVersion": "3.10",
     "pythonPlatform": "Windows",
     "extraPaths": [
-        "C:\\Users\\srira\\OneDrive\\Desktop\\MINI_Project_folders\\jarvis",
-        "C:\\Users\\srira\\OneDrive\\Desktop\\MINI_Project_folders\\jarvis\\backend"
+        "c:\\Users\\srira\\OneDrive\\Desktop\\MINI_Project_folders\\KYRA\\backend"
     ],
     "typeCheckingMode": "off"
 }

@@ -1,6 +1,6 @@
-# KYRA — AI Desktop Assistant
+# KYRA — Advanced Neural Desktop Assistant
 
-> **Knowledgeable Yet Responsive Assistant**  
+> **KYRA — Advanced Neural Desktop Assistant**  
 > A personal AI assistant powered by **SambaNova AI** (Llama 3.3 70B) with a floating animated avatar, real-time facial expression detection, voice I/O, and a modern Electron + React UI.
 
 ---
@@ -13,7 +13,7 @@
 - 🌟 **Animated SVG avatar** — 8 states: idle, listening, thinking, talking, happy, sad, angry, surprised
 - 👁️ **Facial expression detection** — OpenCV + ONNX Runtime, drives avatar reactions in real time
 - 🖥️ **Transparent floating overlay** — always-on-top, draggable avatar window
-- 🧠 **Conversation memory** — KYRA remembers context within a session
+- 🧠 **Conversation memory** — KRA AI remembers context within a session
 
 ---
 

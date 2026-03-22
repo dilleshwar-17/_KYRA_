@@ -10,5 +10,14 @@ export default defineConfig({
     },
     server: {
         port: 5173,
+        proxy: {
+            '/health': 'http://127.0.0.1:8091',
+            '/chat': 'http://127.0.0.1:8091',
+            '/reset': 'http://127.0.0.1:8091',
+            '/ws': {
+                target: 'ws://127.0.0.1:8091',
+                ws: true,
+            },
+        },
     },
 })

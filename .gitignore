@@ -20,3 +20,9 @@ env/
 # Misc
 .DS_Store
 *.tar.gz
+*.mp3
+*.wav
+*.mp4
+*.webm
+python-portable/
+.pytest_cache/

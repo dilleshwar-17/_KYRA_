@@ -9,10 +9,14 @@ import tempfile
 import os
 import time
 import asyncio
+import sys
+# Help IDE find adjacent modules
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 _active = False
 _loop_ref = None          # asyncio event loop from main.py
 _clients: set = set()     # WebSocket clients to broadcast to
+_callback = None          # Optional callback for wake words
 
 try:
     import sounddevice as sd
@@ -35,16 +39,14 @@ except ImportError as e:
     _sr_available = False
     print(f"[WARNING] Wake word listener unavailable: {e}")
 
-def _get_supported_info():
-    """Detect working samplerate and channels."""
-    rates = [44100, 48000, 16000]
-    for sr_val in rates:
-        try:
-            sd.check_input_settings(samplerate=sr_val, channels=1)
-            return sr_val, 1
-        except Exception:
-            continue
-    return 16000, 1  # Fallback
+def _get_supported_info(device_id=None):
+    """Detect working samplerate and channels. Silero VAD REQUIRES 16000 Hz."""
+    try:
+        sd.check_input_settings(device=device_id, samplerate=16000, channels=1)
+        return 16000, 1
+    except Exception:
+        # Resampling will be required if hardware strictly rejects 16k, but Windows usually accepts it.
+        return 16000, 1
 
 def _check_mic_level(audio_data):
     """Check if the audio has enough signal to be worth transcribing."""
@@ -55,6 +57,9 @@ def _check_mic_level(audio_data):
 WAKE_PHRASES = [
     "hey kyra", "hi kyra", "hey kira", "hi kira",
     "hey kera", "hey cara", "ok kyra", "okay kyra",
+    "hey keira", "hi keira", "hey kaira", "hi kaira",
+    "hello kyra", "hello kira", "hello keira",
+    "hey tyra", "hey cairo", "hey hera", "hey sierra"
 ]
 CHUNK_SEC   = 4    # how long each passive listen chunk is
 FS          = 16000
@@ -65,7 +70,7 @@ def _transcribe_chunk(audio_data, fs) -> str | None:
     try:
         # Pre-process: Normalization
         max_val = np.max(np.abs(audio_data))
-        if max_val > 0:
+        if max_val > 0.0001:  # Prevent amplifying pure static/silence, but allow very quiet mics
             audio_data = audio_data / max_val * 0.9
         
         audio_int = (audio_data * 32767).astype(np.int16)
@@ -117,17 +122,26 @@ def _listen_loop():
     """Background thread — streams audio, detects speech with VAD, captures and transcribes on speech end."""
     global _active
     print("[INFO] Passive wake-word listener started — say 'Hey Kyra'!")
-    fs, channels = _get_supported_info()
-    print(f"[INFO] Wake-word SR: {fs}")
+    device_env = os.getenv("KYRA_MIC_DEVICE")
+    device_id = None
+    if device_env:
+        try:
+            device_id = int(device_env)
+        except ValueError:
+            device_id = device_env
+
+    fs, channels = _get_supported_info(device_id)
+    print(f"[INFO] Wake-word SR: {fs}, Device: {device_id}")
     
-    vad_iterator = VADIterator(_vad_model)
+    # Lower threshold to 0.15 for laptop mics/quieter distances
+    vad_iterator = VADIterator(_vad_model, threshold=0.15)
     chunk_size = 512
     
     buffer = []
     is_speaking = False
 
     try:
-        with sd.InputStream(samplerate=fs, channels=1, blocksize=chunk_size) as stream:
+        with sd.InputStream(samplerate=fs, channels=1, blocksize=chunk_size, device=device_id) as stream:
             while _active:
                 audio_chunk, overflowed = stream.read(chunk_size)
                 if overflowed:
@@ -163,40 +177,34 @@ def _listen_loop():
                         if any(p in transcript for p in WAKE_PHRASES):
                             command = _extract_command(transcript)
 
-                            # Notify frontend: wake word heard
-                            _broadcast({"event": "state", "state": "listening"})
-
-                            if not command:
-                                # Wait for follow-up command
-                                print("[INFO] Wake word! Listening for command…")
-                                _broadcast({"event": "wakeword"})
-                                
-                                # Do a quick 5s listen for the command itself
-                                audio2 = sd.rec(int(5 * fs), samplerate=fs, channels=channels, dtype="float32")
-                                sd.wait()
-                                command = _transcribe_chunk(audio2, fs) or ""
-
                             if command:
-                                print(f"[INFO] Command: {command}")
-                                _broadcast({"event": "wake_command", "text": command})
-                            else:
-                                _broadcast({"event": "state", "state": "idle"})
+                                print(f"[INFO] Wake command: {command}")
+                                # Notify frontend: wake word heard and we are processing
+                                _broadcast({"event": "state", "state": "listening"})
+                                if _callback:
+                                    # The callback is responsible for being thread-safe
+                                    # and scheduling work on the main loop.
+                                    _callback(command)
+                            # If only wake word is heard without a command, we just ignore it and continue listening.
+                            # This creates a more seamless "Hey Google, what's the weather" experience.
     except Exception as e:
         print(f"[wake_loop] error: {e}")
+        print("[TIP] If the microphone failed to open, run 'python backend/configure_mic.py'")
         time.sleep(1)
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
 
-def start(loop, clients: set):
-    """Start the passive listener. Pass asyncio loop and shared clients set."""
-    global _active, _loop_ref, _clients
+def start(loop, clients: set, callback=None):
+    """Start the passive listener. Pass asyncio loop, clients set, and an optional callback."""
+    global _active, _loop_ref, _clients, _callback
     if not _sr_available:
         print("[WARNING] Passive listener disabled (missing deps).")
         return
     _active = True
     _loop_ref = loop
     _clients = clients
+    _callback = callback
     t = threading.Thread(target=_listen_loop, daemon=True, name="wakeword")
     t.start()
 
